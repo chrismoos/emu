@@ -1,0 +1,80 @@
+.include "common.a65"
+
+.segment "HEADER"
+
+    ldx #$20 ; disk header is here $20, $00, $03
+    ldy #$00
+    ldx #$03
+    lda #0
+    beq init
+
+.segment "CODE"
+
+init:
+    get_slot
+    get_ioreg_base
+    tax
+    lda $c080,x
+    bpl fail
+    ; slot number << 4 in x
+    jmp $801
+fail:
+    ldx #0
+loop:
+    beq loop
+
+
+dispatch_entry:
+    clc
+    bcc dispatch
+
+smartport_access:
+    tsx
+    txa
+    pha
+    get_slot
+    get_ioreg_base
+    tax
+    pla
+    sta $c085,x     ; send args
+    lda $c084,x     ; dispatch the call and get error
+    pha
+    lda $c082,x     ; get x return
+    pha
+    lda $c083,x     ; get y return
+    tay
+    pla
+    tax
+    pla             ; get error code back into accumulator
+    clc
+    beq smartport_done
+    sec             ; set carry if error occurred, accumulator contains error
+smartport_done:
+    tsx
+    inx
+    inc $100,x      ; jsr+3
+    inc $100,x
+    inc $100,x
+    rts
+
+dispatch:
+    get_slot
+    get_ioreg_base
+    tax
+    lda $c081,x     ; dispatch the call and get error
+    pha
+    lda $c082,x     ; get x return
+    tax
+    lda $c083,x     ; get y return
+    tay
+    pla             ; get error code back into accumulator
+    clc
+    beq dispatch_done
+    sec             ; set carry if error occurred, accumulator contains error
+dispatch_done:
+    rts
+
+.segment "DISPATCH"
+
+.byte $0           ; status byte, served from smartport.rs
+.byte <dispatch_entry

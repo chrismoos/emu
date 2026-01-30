@@ -1,0 +1,217 @@
+.ZEROPAGE
+
+TEMP = $0
+JSR_OP = $1
+JSR_LO = $2
+JSR_HI = $3
+JSR_RTS = $4
+
+MOUSE_RESERVED_1 = $678
+
+.segment "HEADER"
+
+IOSTART = $c080
+
+; INPUT: A = peripheral register
+; INPUT: Y = slot offset value (n0)
+; OUTPUT: A = peripheral call result
+.macro _ioreg_call
+    sta TEMP            ; store the peripheral register here
+    tya
+    adc TEMP
+    tax
+    lda IOSTART,x
+.endmacro
+
+.macro encode_jsr
+    pha
+    lda #$20
+    sta JSR_OP
+    get_slot
+    txa
+    sta JSR_HI
+    lda #$60
+    sta JSR_RTS
+    pla
+.endmacro
+
+.macro jsr_offset offset
+    pha
+    lda #offset
+    sta JSR_LO
+    pla
+    jsr JSR_OP
+.endmacro
+
+.include "common.a65"
+
+.macro ioreg_call_arg register
+    php
+    tay                 ; move mode into Y
+    pha
+    get_ioreg_base
+    adc register
+    tax
+    tya                 ; move mode into A
+    sta IOSTART,x
+    pla
+    plp
+    sec
+    rts
+.endmacro
+
+basicinit:
+    bit $ff58
+    bvs init
+    sec
+    bcc init
+    clv
+    bvc init
+
+
+;.word $38   ; ID byte (from Pascal 1.0)
+;.word $18   ; ID byte (from Pascal 1.0) 
+
+;.byte 0
+;.word 0
+
+.byte $1    ; Generic signature of cards with Pascal 1.1 Protocol
+.byte $20    ; Device signature byte
+
+;.byte $f4   ; Pascal Initialization
+;.byte $f4   ; Pascal Read
+;.byte $f4   ; Pascal Write
+;.byte $f4   ; Pascal Status
+.byte <unimpl
+.byte <unimpl
+.byte <unimpl
+.byte <unimpl
+
+.segment "FIRMWARE_ROUTINES"
+
+.byte <setmouse
+.byte <servemouse
+.byte <readmouse
+.byte <clearmouse
+.byte <posmouse
+.byte <clampmouse
+.byte <homemouse
+.byte <initmouse
+.byte <getclamp
+.byte <unimpl
+.byte <unimpl
+.byte <unimpl
+.byte <unimpl
+.byte <unimpl
+
+.segment "CODE"
+
+init:
+    tya
+    pha
+    get_slot
+    get_ioreg_base
+    tay
+    ;ldx #9
+    ;pla
+    ;clc
+    ;bcc ioreg_call
+    ldx #10
+    pla
+    clc
+    bcc ioreg_call_load
+
+initmouse:
+    ldx #0
+    clc
+    bcc ioreg_call
+
+getclamp:
+    ldx #8
+    clc
+    bcc ioreg_call
+
+setmouse:
+    ldx #1
+    clc
+    bcc ioreg_call
+
+servemouse:
+    get_slot
+    get_ioreg_base
+    adc #4              ; ServeMouse reg
+    tax
+    lda IOSTART,x
+    sec
+    beq not_mouse_int
+    clc
+not_mouse_int:
+    rts
+
+readmouse:
+    ldx #2
+    clc
+    bcc ioreg_call
+
+clearmouse:
+    ldx #3
+    clc
+    bcc ioreg_call
+
+posmouse:
+    ldx #7
+    clc
+    bcc ioreg_call
+
+clampmouse:
+    ldx #5
+    clc
+    bcc ioreg_call
+
+homemouse:
+    ldx #6
+    clc
+    bcc ioreg_call
+
+; INPUT: X = peripheral register
+; INPUT: Y = slot offset value (n0)
+; INPUT: A = peripheral call arg
+ioreg_call:
+    php
+    pha
+    stx TEMP
+    tya
+    adc TEMP
+    tax
+    pla
+    sta IOSTART,x
+    plp
+    clc         ; no error occurred
+    rts
+
+; INPUT: X = peripheral register
+; INPUT: Y = slot offset value (n0)
+; OUTPUT: A = peripheral call result
+ioreg_call_load:
+    php
+    stx TEMP
+    tya
+    adc TEMP
+    tax
+    lda IOSTART,x
+    plp
+    clc         ; no error occurred
+    rts
+
+.segment "UNIMPL"
+
+unimpl:
+    ldx #$3
+    sec
+    rts
+
+.segment "FOOTER"
+
+.byte $d6
+.word 0
+.word $0100

@@ -1,0 +1,24 @@
+; gets the current slot and puts it in x
+.macro get_slot
+    ; inject an RTS to get our address off stack
+    lda #$60
+    ldy #$10
+    sta $10
+    jsr $0010
+    tsx
+    lda $100,X ; get high byte off stack
+    tax
+    tya
+    sta $10 ; put original value back
+.endmacro
+
+; with the high byte of the ROM access in X
+; extract the slot and return the i/o reg base in A
+.macro get_ioreg_base
+    txa
+    and #$0f
+    asl a
+    asl a
+    asl a
+    asl a
+.endmacro

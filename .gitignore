@@ -1,0 +1,6 @@
+/target
+.DS_Store
+dist
+*.o
+build
+*.tar.gz

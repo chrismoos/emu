@@ -1,0 +1,182 @@
+name: build
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Run tests once on Linux
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev cc65
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-test-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Run tests
+        run: cargo test --release
+
+  # Build native binaries for each platform
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 - native build
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            make_target: linux-x86_64
+
+          # Linux aarch64 - native ARM64 runner
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            make_target: linux-aarch64
+
+          # macOS x86_64 - Intel runner
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+            make_target: macos-x86_64
+
+          # macOS aarch64 - Apple Silicon runner
+          - target: aarch64-apple-darwin
+            os: macos-15
+            make_target: macos-aarch64
+
+          # Windows x86_64 - cross compile from Linux
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            make_target: windows
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev cc65
+
+      - name: Install Windows cross-compilation tools
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cc65
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: make ${{ matrix.make_target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-${{ matrix.target }}
+          path: "*.tar.gz"
+
+  # Build WASM
+  build-wasm:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev cc65
+
+      - name: Add WASM target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install trunk
+        run: |
+          curl -Lo /tmp/trunk.tar.gz "https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz"
+          tar xzf /tmp/trunk.tar.gz -C /tmp
+          mv /tmp/trunk ~/.cargo/bin/
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build WASM
+        run: |
+          trunk build --release --no-default-features --features wasm
+          chmod -R a+rX dist/
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-wasm
+          path: dist/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: wasm-pages
+          path: dist/
+
+  # Create release with all artifacts
+  release:
+    needs: [build, build-wasm]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: emu-*
+          merge-multiple: false
+
+      - name: List artifacts
+        run: find artifacts/ -type f
+
+      - name: Upload combined release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-builds
+          path: artifacts/
+
+  # Deploy WASM to GitHub Pages
+  deploy:
+    needs: build-wasm
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: wasm-pages

@@ -1,0 +1,56 @@
+[package]
+name = "emu"
+version = "0.1.0"
+edition = "2024"
+default-run = "emu"
+authors = ["Chris Moos <chris@chrismoos.com>"]
+description = "A cross-platform emulator , currently supporting Apple II"
+license = "MIT"
+repository = "https://github.com/chrismoos/emu"
+homepage = "https://emu.chrismoos.com"
+readme = "README.md"
+keywords = ["emulator", "apple-ii", "6502", "retro", "wasm"]
+categories = ["emulators", "games"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+paste = "1"
+eframe = { version = "0.33", features = ["default"] }
+cpal = { version = "0.16", features = ["wasm-bindgen"] }
+hound = "3"
+ringbuf = "0.4"
+crossbeam = "0.8"
+byteorder = "1"
+crc = "3"
+rand = "0.9"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+rfd = { version = "0.15", features = ["file-handle-inner"] }
+fundsp = "0.20"
+tokio = { version = "1", features = ["sync", "time", "rt", "io-util", "macros"] }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+web-sys = { version = "0.3", optional = true }
+js-sys = { version = "0.3", optional = true }
+winit = "0.30"
+console_log = { version = "1", features = ["color"], optional = true }
+gloo-timers = { version = "0.3", optional = true, features = ["futures"] }
+serialport = "4"
+modular-bitfield = "0.13"
+tokio-serial = { version = "5", optional = true }
+
+[features]
+default = ["native"]
+native = ["tokio/full", "dep:tokio-serial"]
+wasm = ["dep:wasm-bindgen-futures", "dep:web-sys", "dep:console_log", "dep:gloo-timers", "dep:js-sys"]
+
+[[bin]]
+path = "src/main.rs"
+name = "emu"
+
+[[bin]]
+path = "src/bin/dump_character_rom.rs"
+name = "appleii-dump-character-rom"
+
+[lib]
+path = "src/lib/mod.rs"
