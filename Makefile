@@ -8,8 +8,8 @@ MACOS_RESOURCES := $(MACOS_CONTENTS)/Resources
 TARGET_MACOS_X86 := x86_64-apple-darwin
 TARGET_MACOS_ARM := aarch64-apple-darwin
 TARGET_WINDOWS := x86_64-pc-windows-gnu
-TARGET_LINUX_X86 := x86_64-unknown-linux-gnu
-TARGET_LINUX_ARM := aarch64-unknown-linux-gnu
+TARGET_LINUX_X86 := x86_64-unknown-linux-musl
+TARGET_LINUX_ARM := aarch64-unknown-linux-musl
 
 ARCHIVE_BASE_NAME := emu
 

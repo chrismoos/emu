@@ -35,7 +35,7 @@ struct State {
 
 pub struct EmulatorApplication {
     emulator: Arc<Emulator>,
-    audio_stream: Stream,
+    audio_stream: Option<Stream>,
     last_stats_update: Instant,
     last_stats: Stats,
     state: Arc<RwLock<State>>,
@@ -72,42 +72,49 @@ impl EmulatorApplication {
             .default_output_device()
             .ok_or("no default audio device")
             .unwrap();
-        let supported_configs_range = device
-            .supported_output_configs()
-            .expect("error while querying configs");
 
-        let audio_config =
-            Self::detect_audio_config(supported_configs_range).expect("couldn't find supported audio config");
+        let audio_stream = match device.supported_output_configs() {
+            Ok(supported_configs_range) => {
+                let audio_config = Self::detect_audio_config(supported_configs_range)
+                    .expect("couldn't find supported audio config");
 
-        debug!(
-            "audio config: {} Hz, {} channels",
-            audio_config.sample_rate, audio_config.channels
-        );
+                debug!(
+                    "audio config: {} Hz, {} channels",
+                    audio_config.sample_rate, audio_config.channels
+                );
 
-        emulator
-            .target
-            .lock()
-            .unwrap()
-            .configure_audio(&audio_config);
+                emulator
+                    .target
+                    .lock()
+                    .unwrap()
+                    .configure_audio(&audio_config);
 
-        let stream_config = StreamConfig {
-            channels: audio_config.channels,
-            sample_rate: SampleRate(audio_config.sample_rate),
-            buffer_size: cpal::BufferSize::Default,
+                let stream_config = StreamConfig {
+                    channels: audio_config.channels,
+                    sample_rate: SampleRate(audio_config.sample_rate),
+                    buffer_size: cpal::BufferSize::Default,
+                };
+                let at = emulator.target.clone();
+                let channels = audio_config.channels as usize;
+
+                Some(
+                    device
+                        .build_output_stream(
+                            &stream_config,
+                            move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+                                at.lock().unwrap().fill_audio_buffer(data, channels);
+                            },
+                            move |_err| {},
+                            None,
+                        )
+                        .unwrap(),
+                )
+            }
+            Err(e) => {
+                error!("failed to setup audio: {:?}", e);
+                None
+            }
         };
-        let at = emulator.target.clone();
-        let channels = audio_config.channels as usize;
-
-        let audio_stream = device
-            .build_output_stream(
-                &stream_config,
-                move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-                    at.lock().unwrap().fill_audio_buffer(data, channels);
-                },
-                move |_err| {},
-                None,
-            )
-            .unwrap();
 
         let selected_machine = emulator.target.lock().unwrap().target_type_id().to_owned();
         let emulator = Arc::new(emulator);
@@ -318,7 +325,9 @@ impl App for EmulatorApplication {
                         #[cfg(feature = "wasm")]
                         {
                             use cpal::traits::StreamTrait;
-                            self.audio_stream.play().unwrap();
+                            if let Some(stream) = self.audio_stream.as_ref() {
+                                stream.play().unwrap();
+                            }
                         }
                         spawn(async move {
                             let t1 = t.lock().unwrap().clone();
