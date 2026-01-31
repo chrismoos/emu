@@ -24,23 +24,100 @@ jobs:
       - name: Run tests
         run: cargo test --release
 
-  # Build native binaries for each platform
+  # Build Linux binaries (musl, via Alpine container)
+  build-linux:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            make_target: linux-x86_64
+
+    runs-on: ${{ matrix.os }}
+    container: alpine:latest
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          echo "https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+          apk add --no-cache build-base musl-dev alsa-lib-dev eudev-dev pkgconf curl bash git cc65 perl linux-headers
+
+      - name: Build alsa-lib static
+        run: |
+          cd /tmp
+          wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.13.tar.bz2
+          tar xjf alsa-lib-1.2.13.tar.bz2
+          cd alsa-lib-1.2.13
+          ./configure --enable-static --disable-shared --prefix=/usr
+          make -j$(nproc)
+          make install
+
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --target ${{ matrix.target }}
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: alpine-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: make ${{ matrix.make_target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-${{ matrix.target }}
+          path: "*.tar.gz"
+
+  # Build Linux aarch64 (musl, via docker run — JS actions don't support Alpine containers on ARM64)
+  build-linux-arm:
+    needs: test
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in Alpine container
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace alpine:latest sh -c '
+            echo "https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories &&
+            apk add --no-cache build-base musl-dev alsa-lib-dev eudev-dev pkgconf curl bash git cc65 perl linux-headers &&
+            cd /tmp &&
+            wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.13.tar.bz2 &&
+            tar xjf alsa-lib-1.2.13.tar.bz2 &&
+            cd alsa-lib-1.2.13 &&
+            ./configure --enable-static --disable-shared --prefix=/usr &&
+            make -j$(nproc) &&
+            make install &&
+            cd /workspace &&
+            curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --target aarch64-unknown-linux-musl &&
+            . /root/.cargo/env &&
+            make linux-aarch64
+          '
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-aarch64-unknown-linux-musl
+          path: "*.tar.gz"
+
+  # Build native binaries for macOS and Windows
   build:
     needs: test
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64 - native build
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            make_target: linux-x86_64
-
-          # Linux aarch64 - native ARM64 runner
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
-            make_target: linux-aarch64
-
           # macOS x86_64 - Intel runner
           - target: x86_64-apple-darwin
             os: macos-15-intel
@@ -140,7 +217,7 @@ jobs:
 
   # Create release with all artifacts
   release:
-    needs: [build, build-wasm]
+    needs: [build, build-linux, build-linux-arm, build-wasm]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
