@@ -16,7 +16,39 @@ The MOS 6502 processor is cycle accurate (or at least as close as possible given
 
 `emu` uses the immediate-mode [egui](https://github.com/emilk/egui) library for video display and input, and [cpal](https://github.com/RustAudio/cpal) for audio.
 
-## Running
+## Download
+
+Pre-built binaries for macOS, Linux, and Windows are available on the [releases page](https://github.com/chrismoos/emu/releases).
+
+## Building from source
+
+### Prerequisites
+
+- [Rust](https://rustup.rs/)
+- [cc65](https://cc65.github.io/) — 6502 cross-assembler for building Apple II firmware
+- libasound2/ALSA and libudev (Linux only)
+
+**macOS:**
+
+```bash
+brew install cc65
+```
+
+**Linux (Debian/Ubuntu):**
+
+```bash
+sudo apt-get install cc65 libudev-dev libasound2-dev
+```
+
+**Linux (Fedora):**
+
+```bash
+sudo dnf install cc65 alsa-lib-devel systemd-devel
+```
+
+**Windows:**
+
+Install [Rust](https://rustup.rs/) and [cc65](https://cc65.github.io/), ensuring both are in your `PATH`.
 
 ### Desktop
 
