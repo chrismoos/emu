@@ -22,41 +22,36 @@ Pre-built binaries for macOS, Linux, and Windows are available on the [releases 
 
 ## Building from source
 
-### Prerequisites
+All platforms require [Rust](https://rustup.rs/) and [cc65](https://cc65.github.io/) (6502 cross-assembler for building Apple II firmware).
 
-- [Rust](https://rustup.rs/)
-- [cc65](https://cc65.github.io/) — 6502 cross-assembler for building Apple II firmware
-- libasound2/ALSA and libudev (Linux only)
+**Linux (Debian/Ubuntu):**
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+. "$HOME/.cargo/env"
+sudo apt-get install build-essential pkg-config cc65 libudev-dev libasound2-dev libxkbcommon-x11-0
+git clone https://github.com/chrismoos/emu && cd emu
+cargo run --release
+```
 
 **macOS:**
 
 ```bash
 brew install cc65
-```
-
-**Linux (Debian/Ubuntu):**
-
-```bash
-sudo apt-get install cc65 libudev-dev libasound2-dev
-```
-
-**Linux (Fedora):**
-
-```bash
-sudo dnf install cc65 alsa-lib-devel systemd-devel
+git clone https://github.com/chrismoos/emu && cd emu
+cargo run --release
 ```
 
 **Windows:**
 
 Install [Rust](https://rustup.rs/) and [cc65](https://cc65.github.io/), ensuring both are in your `PATH`.
 
-### Desktop
-
 ```bash
+git clone https://github.com/chrismoos/emu && cd emu
 cargo run --release
 ```
 
-### WASM
+**WASM:**
 
 ```bash
 trunk serve --features=wasm --no-default-features --release
